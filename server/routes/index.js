@@ -19,11 +19,11 @@ function authentication(pubKeyUser, sigService, time){
     }
     var timeDiff = new Date();
     timeDiff = timeDiff-time;
-    if(timeDiff>300000){
-        console.log("Zeitdifferenz liegt über 5 Minuten");
-        return false;
+    if(timeDiff<300000){
+        return true;
     }
-    return true;
+    console.log("Zeitdifferenz liegt über 5 Minuten");
+    return false;
 }
 
 
