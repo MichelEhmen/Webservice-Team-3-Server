@@ -159,7 +159,7 @@ router.post('/:user_id/message', function(req, res){
 });
 
 //Anzeigen aller Nachrichten
-router.get('/:user_id/message', function(req, res) {
+router.get('/:user_id/message', function(req, res) { //Post ?
 
     var results = [];
     var id = req.params.user_id;
@@ -175,14 +175,14 @@ router.get('/:user_id/message', function(req, res) {
             return res.status(500).json({ success: false, data: err});
         }
 
-        client.query('SELECT pubKey as "pubKeyUser" FROM users where userID = $1 ', [id]);
+        //client.query('SELECT pubKey as "pubKeyUser" FROM users where userID = $1 ', [id]);
 
 
-        if(!authentication(results.rows[0].pubKeyUser, sigService, time)){
-            done();
-            return res.status(500).json({ success: false, data: err});
-        }
-        results = [];
+        //if(!authentication(results.rows[0].pubKeyUser, sigService, time)){
+         //   done();
+          //  return res.status(500).json({ success: false, data: err});
+        //}
+        //results = [];
 
         // SQL Query > Select Data
         var query = client.query("SELECT * FROM messages where targetUserID=($1) ORDER BY messageID ASC;", [id]);
