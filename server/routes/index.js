@@ -47,15 +47,7 @@ router.post('/:user_id', function(req, res) {
         }
         
         // SQL Query > Insert Data
-        client.query("INSERT INTO users(userID, saltMaster, privKeyEnc, pubKey) values($1, $2, $3, $4)", [id, data.saltMaster, data.privKeyEnc, data.pubKey]);
-
-        // SQL Query > Select Data
-        var query = client.query("SELECT * FROM users ORDER BY userID ASC");
-
-        // Stream results back one row at a time
-        query.on('row', function(row) {
-            results.push(row);
-        });
+        var query = client.query("INSERT INTO users(userID, saltMaster, privKeyEnc, pubKey) values($1, $2, $3, $4)", [id, data.saltMaster, data.privKeyEnc, data.pubKey]);
 
         // After all data is returned, close connection and return results
         query.on('end', function() {
