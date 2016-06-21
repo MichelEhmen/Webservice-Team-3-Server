@@ -1,3 +1,3 @@
-var connectionString = process.env.DATABASE_URL || 'postgres://hwevjgxxtdssqz:eVImWmNFV1AC-xpbWrj7nkCFQO@ec2-54-221-226-72.compute-1.amazonaws.com:5432/degmveu9ep94bm';
+var connectionString = process.env.DATABASE_URL || 'postgres://sqawnktvlaijwk:TY4z6xT_fxdwwhkXnpMOBTcpR_@ec2-54-243-201-116.compute-1.amazonaws.com:5432/d77240emvm8oib';
 
 module.exports = connectionString;
