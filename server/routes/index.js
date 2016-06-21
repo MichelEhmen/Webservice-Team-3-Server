@@ -4,15 +4,14 @@ var path = require('path');
 var pg = require('pg');
 var connectionString = require(path.join(__dirname, '../', '../', 'config'));
 var NodeRSA = require('node-rsa');
+var ursa = require('ursa');
 
 
 function authentication(pubKeyUser, sigService, time){
-    var key = new NodeRSA('-----BEGIN PUBLIC KEY-----\n'+
-        pubKeyUser+
-        '\n-----END PUBLIC KEY-----');
+    var pubKey = ursa.createPublicKey(pubKeyUser);
     results = [];
     try{
-        key.decrypt(sigService, 'utf8');
+        key.decrypt(sigService);
     } catch(ex){
         console.log(ex);
         return false;

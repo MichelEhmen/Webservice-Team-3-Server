@@ -33,3 +33,31 @@ if(test(true)){
 
 console.log(test(true));
 
+var ursa = require('ursa');
+var fs = require('fs');
+
+// create a pair of keys (a private key contains both keys...)
+var keys = ursa.generatePrivateKey();
+console.log('keys:', keys);
+console.log('=====================================================');
+// reconstitute the private key from a base64 encoding
+var privPem = keys.toPrivatePem('base64');
+console.log('privPem:', privPem);
+console.log('=====================================================');
+var priv = ursa.createPrivateKey(privPem, '', 'base64');
+
+// make a public key, to be used for encryption
+var pubPem = keys.toPublicPem('base64');
+console.log('pubPem:', pubPem);
+console.log('=====================================================');
+var pub = ursa.createPublicKey(pubPem, 'base64');
+
+// encrypt, with the private key, then decrypt with the public
+var data = 'hello world';
+console.log('data:', data);
+console.log('=====================================================');
+var enc = pub.encrypt(data);
+console.log('enc:', enc.toString());
+console.log('=====================================================');
+var unenc = priv.decrypt(enc);
+console.log('unenc:', unenc.toString());
