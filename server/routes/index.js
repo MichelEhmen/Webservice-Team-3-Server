@@ -65,7 +65,8 @@ router.post('/:user_id', function(req, res) {
 //Login eines Users
 router.get('/:user_id', function(req, res) {
 
-    var results = [];
+    console.log("opened route.");
+    var result;
     var id = req.params.user_id
 
     // Get a Postgres client from the connection pool
@@ -82,19 +83,27 @@ router.get('/:user_id', function(req, res) {
 
         // Stream results back one row at a time
         query.on('row', function(row) {
-            results.push(row);
+            result = row;
         });
 
         // After all data is returned, close connection and return results
         query.on('end', function() {
+            console.log("Query beendet.")
             done();
-            return res.json(results);
+            console.log(result);
+            return res.json(result);
+        });
+
+        query.on('error', function(err) {
+            console.log(err);
+            console.log(req.body);
+            done();
+            return res.status(409).json({success: false, data: err});
         });
 
     });
 
 });
-
 //schicke Nachricht
 router.post('/:user_id/message', function(req, res){
     var results = [];
