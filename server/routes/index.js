@@ -8,15 +8,20 @@ var ursa = require('ursa');
 
 
 function authentication(pubKeyUser, sigService, time){
-    var pubKey = ursa.createPublicKey(pubKeyUser);
+
+    var pubKey = new NodeRSA("-----BEGIN PUBLIC KEY-----\n"+pubKeyUser+"\n-----END PUBLIC KEY-----");
+    console.log(pubKey.isPublic());
     results = [];
     try{
-        key.decrypt(sigService);
+        pubKey.decryptPublic(sigService);
+        console.log("key ist valide")
     } catch(ex){
         console.log(ex);
         return false;
     }
-    var timeDiff = new Date();
+    var timeDiff = Math.round(Date.now()/1000);
+    console.log(time);
+    console.log(timeDiff);
     timeDiff = timeDiff-time;
     if(timeDiff<300000){
         return true;
@@ -108,15 +113,13 @@ router.get('/:user_id', function(req, res) {
 router.post('/:user_id/message', function(req, res){
     var results = [];
 
-    // Grab data from the URL parameters
-    //var id = req.params.todo_id;
-
     // Grab data from http request
     var umschlagInnen = {sourceUserID: req.params.user_id, cipher: req.body.cipher,iv: req.body.iv, keyRecEnc: req.body.keyRecEnc, sigRec: req.body.sigRec};
     var umschlagAussen = {targetUserID: req.body.targetUserID, sigService: req.body.sigService, time: req.body.timestamp, umschlag: umschlagInnen};
 
     // Get a Postgres client from the connection pool
     pg.connect(connectionString, function(err, client, done) {
+
         // Handle connection errors
         if(err) {
             done();
@@ -124,16 +127,19 @@ router.post('/:user_id/message', function(req, res){
             return res.status(500).json({ success: false, data: err});
         }
 
-
         //Nachrichtenprüfung
-        client.query('SELECT pubKey as "pubKeyUser" FROM users where userID = $1 ', [umschlagInnen.sourceUserID]);
+        var query1 = client.query("SELECT * FROM users where userid=($1) ORDER BY userid ASC;", [umschlagInnen.sourceUserID]);
+
+        query1.on('row', function(row) {
+
+            if(!authentication(row.pubkey, umschlagAussen.sigService, umschlagAussen.time)){
+                done();
+                return res.status(500).json({ success: false, data: err});
+            }
+        });
 
 
-        if(!authentication(results.rows[0].pubKeyUser, umschlagAussen.sigService, umschlagAussen.time)){
-            done();
-            return res.status(500).json({ success: false, data: err});
-        }
-        results = [];
+
 
         console.log("Validierung durchgelaufen");
         //Nachrichtenweiterleitung
@@ -141,15 +147,15 @@ router.post('/:user_id/message', function(req, res){
         client.query("INSERT INTO messages(sourceUserID, targetUserID, cipher, iv, keyRecEnc, sigRec) values($1, $2, $3, $4, $5, $6)", [umschlagInnen.sourceUserID, umschlagAussen.targetUserID, umschlagInnen.cipher, umschlagInnen.iv, umschlagInnen.keyRecEnc, umschlagInnen.sigRec]);
 
         // SQL Query > Select Data
-        var query = client.query("SELECT * FROM messages ORDER BY sourceUserID ASC");
+        var query2 = client.query("SELECT * FROM messages ORDER BY sourceUserID ASC");
 
         // Stream results back one row at a time
-        query.on('row', function(row) {
+        query2.on('row', function(row) {
             results.push(row);
         });
 
         // After all data is returned, close connection and return results
-        query.on('end', function() {
+        query2.on('end', function() {
             done();
             return res.json(results);
         });
@@ -179,13 +185,13 @@ router.get('/:user_id/message', function(req, res) { //Post ?
 
 
         //if(!authentication(results.rows[0].pubKeyUser, sigService, time)){
-         //   done();
-          //  return res.status(500).json({ success: false, data: err});
+        //   done();
+        //  return res.status(500).json({ success: false, data: err});
         //}
         //results = [];
 
         // SQL Query > Select Data
-        var query = client.query("SELECT * FROM messages where targetUserID=($1) ORDER BY messageID ASC;", [id]);
+        var query = client.query("SELECT * FROM messages where messages.targetUserID=($1) ORDER BY messageID ASC;", [id]);
 
         // Stream results back one row at a time
         query.on('row', function(row) {
@@ -196,6 +202,13 @@ router.get('/:user_id/message', function(req, res) { //Post ?
         query.on('end', function() {
             done();
             return res.json(results);
+        });
+
+        query.on('error', function (err) {
+            console.log(err);
+            console.log(req.body);
+            done();
+            return res.status(409).json({success: false, data: err});
         });
 
     });
