@@ -4,17 +4,16 @@ var path = require('path');
 var pg = require('pg');
 var connectionString = require(path.join(__dirname, '../', '../', 'config'));
 var NodeRSA = require('node-rsa');
-var ursa = require('ursa');
 
-
+//Nachrichtenprüfung
+//Prüfung des Nachrichtenabrufs
 function authentication(pubKeyUser, sigService, time){
 
     var pubKey = new NodeRSA("-----BEGIN PUBLIC KEY-----\n"+pubKeyUser+"\n-----END PUBLIC KEY-----");
     console.log(pubKey.isPublic());
-    results = [];
     try{
         pubKey.decryptPublic(sigService);
-        console.log("key ist valide")
+        console.log("Der Key ist valide")
     } catch(ex){
         console.log(ex);
         return false;
@@ -35,31 +34,31 @@ function authentication(pubKeyUser, sigService, time){
 //Registrierung eines Users
 router.post('/:user_id', function(req, res) {
 
-    var results = [];
-
-    // Grab data from http request
     var data = {saltMaster: req.body.saltMaster, privKeyEnc: req.body.privKeyEnc, pubKey: req.body.pubKey};
     var id = req.params.user_id;
 
-    // Get a Postgres client from the connection pool
+    //Postgres-Verbindung
     pg.connect(connectionString, function(err, client, done) {
-        // Handle connection errors
+        // Behandlung von Verbindungsfehlern
         if(err) {
             done();
             console.log(err);
             return res.status(500).json({ success: false, data: err});
         }
-        
-        // SQL Query > Insert Data
-        var query = client.query("INSERT INTO users(userID, saltMaster, privKeyEnc, pubKey) values($1, $2, $3, $4)", [id, data.saltMaster, data.privKeyEnc, data.pubKey]);
 
-        // After all data is returned, close connection and return results
+        //SQL Query > Insert Data
+        var query = client.query("INSERT INTO users(userID, saltMaster, privKeyEnc, pubKey) values($1, $2, $3, $4);", [id, data.saltMaster, data.privKeyEnc, data.pubKey]);
+
+        //Nachdem die Daten erfolgreich persistiert wurden, wird der Status 201 zurückgegeben
         query.on('end', function() {
             done();
             return res.status(201).json();
         });
 
+        //Bei einem Fehler beim Import in die Datenbank wird der Status 409 zurückgegeben
         query.on('error', function(err) {
+            console.log(err);
+            console.log(req.body);
             done();
             return res.status(409).json({success: false, data: err});
         });
@@ -74,31 +73,30 @@ router.get('/:user_id', function(req, res) {
     var result;
     var id = req.params.user_id
 
-    // Get a Postgres client from the connection pool
+    //Postgres-Verbindung
     pg.connect(connectionString, function(err, client, done) {
-        // Handle connection errors
+        //Behandlung von Verbindungsfehlern
         if(err) {
             done();
             console.log(err);
             return res.status(500).json({ success: false, data: err});
         }
 
-        // SQL Query > Select Data
-        var query = client.query("SELECT * FROM users where userid=($1) ORDER BY userid ASC;", [id]);
+        //SQL Query > Select Data
+        var query = client.query("SELECT saltmaster, pubkey, privkeyenc FROM users where userid=($1);", [id]);
 
-        // Stream results back one row at a time
+
         query.on('row', function(row) {
             result = row;
         });
 
-        // After all data is returned, close connection and return results
+        //Nachdem alle Daten empfangen wurden, wird die Verbindung geschlossen und die Daten zurückgegeben.
         query.on('end', function() {
-            console.log("Query beendet.")
             done();
-            console.log(result);
             return res.json(result);
         });
 
+        //Bei einem Fehler beim Import in die Datenbank wird der Status 409 zurückgegeben
         query.on('error', function(err) {
             console.log(err);
             console.log(req.body);
@@ -109,18 +107,19 @@ router.get('/:user_id', function(req, res) {
     });
 
 });
-//schicke Nachricht
+
+//Verschicken einer Nachricht
 router.post('/:user_id/message', function(req, res){
     var results = [];
 
-    // Grab data from http request
+
     var umschlagInnen = {sourceUserID: req.params.user_id, cipher: req.body.cipher,iv: req.body.iv, keyRecEnc: req.body.keyRecEnc, sigRec: req.body.sigRec};
     var umschlagAussen = {targetUserID: req.body.targetUserID, sigService: req.body.sigService, time: req.body.timestamp, umschlag: umschlagInnen};
 
-    // Get a Postgres client from the connection pool
+    //Postgres-Verbindung
     pg.connect(connectionString, function(err, client, done) {
 
-        // Handle connection errors
+        //Behandlung von Verbindungsfehlern
         if(err) {
             done();
             console.log(err);
@@ -131,79 +130,76 @@ router.post('/:user_id/message', function(req, res){
         var query1 = client.query("SELECT * FROM users where userid=($1) ORDER BY userid ASC;", [umschlagInnen.sourceUserID]);
 
         query1.on('row', function(row) {
-
+            //Mit dem PublicKey wird die geforderte Überprüfung durchgeführt.
             if(!authentication(row.pubkey, umschlagAussen.sigService, umschlagAussen.time)){
                 done();
                 return res.status(500).json({ success: false, data: err});
             }
         });
 
-
-
-
         console.log("Validierung durchgelaufen");
+
         //Nachrichtenweiterleitung
-        // SQL Query > Insert Data
-        client.query("INSERT INTO messages(sourceUserID, targetUserID, cipher, iv, keyRecEnc, sigRec) values($1, $2, $3, $4, $5, $6)", [umschlagInnen.sourceUserID, umschlagAussen.targetUserID, umschlagInnen.cipher, umschlagInnen.iv, umschlagInnen.keyRecEnc, umschlagInnen.sigRec]);
+        var query2 = client.query("INSERT INTO messages(sourceUserID, targetUserID, cipher, iv, keyRecEnc, sigRec) values($1, $2, $3, $4, $5, $6)", [umschlagInnen.sourceUserID, umschlagAussen.targetUserID, umschlagInnen.cipher, umschlagInnen.iv, umschlagInnen.keyRecEnc, umschlagInnen.sigRec]);
 
-        // SQL Query > Select Data
-        var query2 = client.query("SELECT * FROM messages ORDER BY sourceUserID ASC");
-
-        // Stream results back one row at a time
-        query2.on('row', function(row) {
-            results.push(row);
-        });
-
-        // After all data is returned, close connection and return results
+        //Nachdem alle Daten persistiert wurden, wird die Verbindung geschlossen.
         query2.on('end', function() {
             done();
-            return res.json(results);
+            return res.status(200).json();
         });
 
+        //Bei einem Fehler beim Import in die Datenbank wird der Status 409 zurückgegeben
+        query2.on('error', function(err) {
+            console.log(err);
+            console.log(req.body);
+            done();
+            return res.status(409).json({success: false, data: err});
+        });
 
     });
 });
 
 //Anzeigen aller Nachrichten
-router.get('/:user_id/message', function(req, res) { //Post ?
+router.post('/:user_id/messages', function(req, res) { //Post ?
 
     var results = [];
     var id = req.params.user_id;
-    var time = req.body.timestamp;
+    var time = req.body.timeStamp;
     var sigService = req.body.sigService;
 
-    // Get a Postgres client from the connection pool
     pg.connect(connectionString, function(err, client, done) {
-        // Handle connection errors
+        //Behandlung von Verbindungsfehlern
         if(err) {
             done();
             console.log(err);
             return res.status(500).json({ success: false, data: err});
         }
 
-        //client.query('SELECT pubKey as "pubKeyUser" FROM users where userID = $1 ', [id]);
+        var query1 = client.query('SELECT * FROM users where userID = $1 ', [id]);
 
+        query1.on('row', function (row) {
+            if(!authentication(row.pubkey, sigService, time)){
+                done();
+                return res.status(500).json({ success: false, data: err});
+            }
+        });
 
-        //if(!authentication(results.rows[0].pubKeyUser, sigService, time)){
-        //   done();
-        //  return res.status(500).json({ success: false, data: err});
-        //}
-        //results = [];
 
         // SQL Query > Select Data
-        var query = client.query("SELECT * FROM messages where messages.targetUserID=($1) ORDER BY messageID ASC;", [id]);
+        var query = client.query("SELECT sigrec, sourceuserid, iv, cipher, keyrecenc FROM messages where messages.targetUserID=($1) ORDER BY messageID ASC;", [id]);
 
-        // Stream results back one row at a time
+        //Die Nachrichten werden als Json-Objekte in Json-Array geladen.
         query.on('row', function(row) {
             results.push(row);
         });
 
-        // After all data is returned, close connection and return results
+        //Nachdem alle Daten empfangen wurden, wird die Verbindung geschlossen und die Daten zurückgegeben.
         query.on('end', function() {
             done();
             return res.json(results);
         });
 
+        //Bei einem Fehler beim Import in die Datenbank wird der Status 409 zurückgegeben
         query.on('error', function (err) {
             console.log(err);
             console.log(req.body);
@@ -215,18 +211,14 @@ router.get('/:user_id/message', function(req, res) { //Post ?
 
 });
 
-//User löschen
+
+//Benutzer löschen
 router.delete('/:user_id', function(req, res) {
 
-    var results = [];
-
-    // Grab data from the URL parameters
     var id = req.params.user_id;
 
-
-    // Get a Postgres client from the connection pool
     pg.connect(connectionString, function(err, client, done) {
-        // Handle connection errors
+        //Behandlung von Verbindungsfehlern
         if(err) {
             done();
             console.log(err);
@@ -239,15 +231,16 @@ router.delete('/:user_id', function(req, res) {
         // SQL Query > Select Data
         var query = client.query("SELECT * FROM users ORDER BY id ASC");
 
-        // Stream results back one row at a time
-        query.on('row', function(row) {
-            results.push(row);
-        });
-
-        // After all data is returned, close connection and return results
+        //Nachdem die Daten gelöscht wurden, wird die Verbindung geschlossen und der Status zurückgegeben.
         query.on('end', function() {
             done();
-            return res.json(results);
+            return res.status(200).json();
+        });
+
+        query.on('error', function (err) {
+            console.log(err);
+            done();
+            return res.status(409).json({success: false, data: err});
         });
     });
 
@@ -256,37 +249,33 @@ router.delete('/:user_id', function(req, res) {
 //Nachricht löschen
 router.delete('/:user_id/:message_id', function(req, res) {
 
-    var results = [];
-
     // Grab data from the URL parameters
-    var tagertUserID = req.params.targetUser_id;
+    var userID = req.params.user_id;
     var messageID = req.params.message_id;
 
+    //Behandlung von Verbindungsfehlern
+    if(err) {
+        done();
+        console.log(err);
+        return res.status(500).json({ success: false, data: err});
+    }
 
-    // Get a Postgres client from the connection pool
     pg.connect(connectionString, function(err, client, done) {
-        // Handle connection errors
-        if(err) {
-            done();
-            console.log(err);
-            return res.status(500).json({ success: false, data: err});
-        }
-    
+
         // SQL Query > Delete Data
-        client.query("DELETE FROM messages WHERE messageID=($1) and targetUserID=($2)", [messageID, targetUserID]);
+        client.query("DELETE FROM messages WHERE messageid=($1) and targetuserid=($2)", [messageID, userID]);
 
-        // SQL Query > Select Data
-        var query = client.query("SELECT * FROM messages ORDER BY targetUserID ASC");
-
-        // Stream results back one row at a time
-        query.on('row', function(row) {
-            results.push(row);
-        });
-
-        // After all data is returned, close connection and return results
+        //Nachdem die Daten gelöscht wurden, wird die Verbindung geschlossen und der Status zurückgegeben.
         query.on('end', function() {
             done();
-            return res.json(results);
+            return res.status(200).json();
+        });
+
+        //Bei einem Fehler beim Import in die Datenbank wird der Status 409 zurückgegeben
+        query.on('error', function (err) {
+            console.log(err);
+            done();
+            return res.status(409).json({success: false, data: err});
         });
     });
 
